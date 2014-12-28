@@ -5,9 +5,11 @@ package com.example.lukedavitt.sunshine.app;
  */
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -32,36 +34,36 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
-import java.util.List;
 
 
 /**
  * A placeholder fragment containing a simple view.
  */
 public class ForecastFragment extends Fragment {
-
+    private final String LOG_TAG = ForecastFragment.class.getSimpleName();
     private ArrayAdapter<String> mForecastAdapter;
     private ListView listView;
 
     public ForecastFragment() {
     }
+
+    private void updateWeather(){
+        FetchWeatherTask fetchWeather = new FetchWeatherTask();
+        SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        String location = settings.getString("location", "94043");
+        fetchWeather.execute(location);
+    }
+
+    @Override
+    public void onStart(){
+        super.onStart();
+        updateWeather();
+    }
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
 
-        // Adding items to arrayList
-        String[] forecastArray = {
-                "Today - Sunny - 88/63",
-                "Tomorrow - Foggy - 70/46",
-                "Weds - Cloudy - 72/63", // it will add Item3 to the third position of
-                "Thurs - Rainy - 64/51",
-                "Fri - Foggy - 70/46",
-                "Sat - Sunny - 76/68"
-        };
-
-        List<String> weekForecast = new ArrayList<String>(Arrays.asList(forecastArray));
 
         mForecastAdapter =
                 new ArrayAdapter<String>(
@@ -112,13 +114,13 @@ public class ForecastFragment extends Fragment {
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_refresh) {
-            FetchWeatherTask fetchWeather = new FetchWeatherTask();
-            fetchWeather.execute("46205");
+            updateWeather();
             return true;
         }
 
         return super.onOptionsItemSelected(item);
     }
+
 
     public class FetchWeatherTask extends AsyncTask<String, Void, String[]> {
         // These two need to be declared outside the try/catch
@@ -236,9 +238,41 @@ public class ForecastFragment extends Fragment {
             // For presentation, assume the user doesn't care about tenths of a degree.
             long roundedHigh = Math.round(high);
             long roundedLow = Math.round(low);
+            SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(getActivity());
+            String units = settings.getString("units", "imperial");
+            long convertedHigh;
+            long convertedLow;
 
-            String highLowStr = roundedHigh + "/" + roundedLow;
+
+            convertedHigh = convertFromKelvin(roundedHigh, units);
+            convertedLow = convertFromKelvin(roundedLow, units);
+
+            String highLowStr = convertedHigh + "/" + convertedLow;
             return highLowStr;
+        }
+
+        private Long convertFromKelvin(long kelvin, String units){
+            if(units.equals("metric")){
+                return convertToCelsius(kelvin);
+            }else{
+                return convertToFaren(kelvin);
+            }
+        }
+
+        private Long convertToFaren(long kelvin){
+            try{
+                return (9/5) * (kelvin - 273) + 32;
+            }catch(Throwable e){
+                return 0L;
+            }
+        }
+
+        private Long convertToCelsius(long kelvin){
+            try{
+                return kelvin-273;
+            }catch(Throwable e){
+                return 0L;
+            }
         }
 
         @Override
@@ -272,7 +306,6 @@ public class ForecastFragment extends Fragment {
 
             JSONObject forecastJson = new JSONObject(forecastJsonStr);
             JSONArray weatherArray = forecastJson.getJSONArray(OWM_LIST);
-
             String[] resultStrs = new String[numDays];
             for(int i = 0; i < weatherArray.length(); i++) {
                 // For now, using the format "Day, description, hi/low"
